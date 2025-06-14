@@ -49,6 +49,8 @@ O1_MODELS: Dict[str, int] = {
     "o3-mini-2025-01-31": 200000,
     "o3": 200000,
     "o3-2025-04-16": 200000,
+    "o3-pro": 200000,
+    "o3-pro-2025-06-10": 200000,
     "o4-mini": 200000,
     "o4-mini-2025-04-16": 200000,
 }
@@ -179,6 +181,32 @@ DISCONTINUED_MODELS = {
     "code-cushman-002": 2048,
     "code-cushman-001": 2048,
 }
+
+JSON_SCHEMA_MODELS = [
+    "o4-mini",
+    "o1",
+    "o1-pro",
+    "o3",
+    "o3-mini",
+    "gpt-4.1",
+    "gpt-4o",
+    "gpt-4.1",
+]
+
+
+def is_json_schema_supported(model: str) -> bool:
+    try:
+        from openai.resources.beta.chat import completions
+
+        if not hasattr(completions, "_type_to_response_format"):
+            return False
+
+        return not model.startswith("o1-mini") and any(
+            model.startswith(m) for m in JSON_SCHEMA_MODELS
+        )
+    except ImportError:
+        return False
+
 
 MISSING_API_KEY_ERROR_MESSAGE = """No API key found for OpenAI.
 Please set either the OPENAI_API_KEY environment variable or \
@@ -560,8 +588,11 @@ def to_openai_message_dicts(
             else:
                 final_message_dicts.append(message_dicts)
         # this follows the logic of having a string-only input from to_openai_responses_message_dict
-        if final_message_txt:
+        if final_message_txt and len(final_message_dicts) == 0:
             return final_message_txt
+        elif final_message_txt and len(final_message_dicts) > 0:
+            final_message_dicts.append({"role": "user", "content": final_message_txt})
+
         return final_message_dicts
     else:
         return [
