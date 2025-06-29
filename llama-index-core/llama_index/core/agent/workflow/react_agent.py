@@ -10,7 +10,6 @@ from llama_index.core.agent.react.types import (
     ResponseReasoningStep,
 )
 from llama_index.core.agent.workflow.base_agent import BaseWorkflowAgent
-from llama_index.core.agent.workflow.single_agent_workflow import SingleAgentRunnerMixin
 from llama_index.core.agent.workflow.workflow_events import (
     AgentInput,
     AgentOutput,
@@ -18,7 +17,7 @@ from llama_index.core.agent.workflow.workflow_events import (
     ToolCallResult,
 )
 from llama_index.core.base.llms.types import ChatResponse
-from llama_index.core.bridge.pydantic import BaseModel, Field
+from llama_index.core.bridge.pydantic import BaseModel, Field, model_validator
 from llama_index.core.llms import ChatMessage
 from llama_index.core.llms.llm import ToolSelection
 from llama_index.core.memory import BaseMemory
@@ -34,7 +33,7 @@ def default_formatter(fields: Optional[dict] = None) -> ReActChatFormatter:
     return ReActChatFormatter.from_defaults(context=fields.get("system_prompt", None))
 
 
-class ReActAgent(SingleAgentRunnerMixin, BaseWorkflowAgent):
+class ReActAgent(BaseWorkflowAgent):
     """React agent implementation."""
 
     reasoning_key: str = "current_reasoning"
@@ -45,6 +44,22 @@ class ReActAgent(SingleAgentRunnerMixin, BaseWorkflowAgent):
         default_factory=default_formatter,
         description="The react chat formatter to format the reasoning steps and chat history into an llm input.",
     )
+
+    @model_validator(mode="after")
+    def validate_formatter(self) -> "ReActAgent":
+        """Validate the formatter."""
+        if (
+            self.formatter.context
+            and self.system_prompt
+            and self.system_prompt not in self.formatter.context
+        ):
+            self.formatter.context = (
+                self.system_prompt + "\n\n" + self.formatter.context.strip()
+            )
+        elif not self.formatter.context and self.system_prompt:
+            self.formatter.context = self.system_prompt
+
+        return self
 
     def _get_prompts(self) -> PromptDictType:
         """Get prompts."""
@@ -78,7 +93,6 @@ class ReActAgent(SingleAgentRunnerMixin, BaseWorkflowAgent):
 
         output_parser = self.output_parser
         react_chat_formatter = self.formatter
-        react_chat_formatter.context = system_prompt
 
         # Format initial chat input
         current_reasoning: list[BaseReasoningStep] = await ctx.get(
